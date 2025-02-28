@@ -1,49 +1,40 @@
-const dotenv = require('dotenv');
-dotenv.config();
-const express = require('express');
+const express = require("express");
+const mongoose = require("mongoose");
+require("dotenv").config();
+const methodOverride = require("method-override");
+const session = require("express-session");
+const path = require("path");
+
+const authController = require("./controllers/auth");
+const recipesController = require("./controllers/recipes");
+const ingredientsController = require("./controllers/ingredients");
+
+const isSignedIn = require("./middleware/is-signed-in");
+const passUserToView = require("./middleware/pass-user-to-view");
+
 const app = express();
-const mongoose = require('mongoose');
-const methodOverride = require('method-override');
-const morgan = require('morgan');
-const session = require('express-session');
 
-const authController = require('./controllers/auth.js');
+app.use(express.urlencoded({ extended: true }));
+app.use(methodOverride("_method"));
+app.use(session({ secret: "cookbook-secret", resave: false, saveUninitialized: false }));
+app.use(express.static("public"));
 
-const port = process.env.PORT ? process.env.PORT : '3000';
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
 
 mongoose.connect(process.env.MONGODB_URI);
-
-mongoose.connection.on('connected', () => {
-  console.log(`Connected to MongoDB ${mongoose.connection.name}.`);
+mongoose.connection.on("connected", () => {
+    console.log(`Connected to MongoDB ${mongoose.connection.name}.`);
 });
 
-app.use(express.urlencoded({ extended: false }));
-app.use(methodOverride('_method'));
-// app.use(morgan('dev'));
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: true,
-  })
-);
+app.use(passUserToView);
 
-app.get('/', (req, res) => {
-  res.render('index.ejs', {
-    user: req.session.user,
-  });
+app.get("/", (req, res) => {
+  res.render("index", { user: req.session.user || null });
 });
+app.use("/auth", authController);
+app.use(isSignedIn);
+app.use("/recipes", recipesController);
+app.use("/ingredients", ingredientsController);
 
-app.get('/vip-lounge', (req, res) => {
-  if (req.session.user) {
-    res.send(`Welcome to the party ${req.session.user.username}.`);
-  } else {
-    res.send('Sorry, no guests allowed.');
-  }
-});
-
-app.use('/auth', authController);
-
-app.listen(port, () => {
-  console.log(`The express app is ready on port ${port}!`);
-});
+app.listen(3000, () => console.log("Server running on port 3000"));
